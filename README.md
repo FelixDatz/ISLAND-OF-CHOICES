@@ -1,64 +1,115 @@
 # Island of Choices
 
-An open-ended problem-solving adventure built with Phaser 3 and Vite.
+Game petualangan edukatif berbasis eksplorasi (Phaser 3 + Vite). Setiap tantangan bisa diselesaikan dengan banyak cara. Di akhir permainan, sistem menganalisis tindakan pemain dan menggambarkan **gaya bermainnya** berdasarkan bukti, bukan skor benar-salah.
 
-## Phase 5 — Cinematic landing page & interactive prologue
+Status: **3 stage lengkap & bisa dimainkan dari awal sampai akhir.** Art dibuat prosedural (tanpa file gambar), suara disintesis (WebAudio). Keduanya bisa diganti aset final tanpa mengubah logika.
 
-The browser now opens on a cinematic landing page instead of immediately entering Stage 1. Players can:
+| Stage | Tantangan utama | Cara menyelesaikan |
+|---|---|---|
+| 1 · Pantai Terdampar | menyeberangi sungai | jalur hulu · rakit · jembatan kayu · berenang (gagal) |
+| 2 · Reruntuhan Hutan | melewati dinding kuil | kode simbol (mural / coba-coba) · tuas bambu · jalan rahasia air terjun · memanjat (aman jika beban ringan) |
+| 3 · Tanjung Mercusuar | memanggil pertolongan | radio · kode lampu SOS · api sinyal · berlayar sendiri (aman jika paham arus) |
 
-- Read the project story, controls, and project purpose.
-- Play a three-chapter interactive prologue.
-- Make one narrative choice in each chapter. These choices are recorded as `prologue_choice` events and do not lock or grant gameplay solutions.
-- Enter Stage 1 after arriving on the island.
+Inventori terbawa antar stage: kerang Stage 1 membuka altar di Stage 2, kelapa bisa diberikan ke monyet, kain bisa jadi bahan sulut, potongan peta menunjukkan jalur aman berlayar. Pilihan di awal punya konsekuensi di akhir.
 
-The prologue and gameplay use separate UI layers. The Phaser game textures are prepared in the background; Stage 1 starts only after the player completes the prologue and chooses **Enter the island**.
-
-## Run locally
-
-Requirements: Node.js compatible with Vite 8.
+## Menjalankan
 
 ```bash
 npm install
-npm run dev
+npm run dev:all      # server API (8787) + Vite dev (5173) sekaligus
+                     # game:      http://localhost:5173/?dev          (?dev = lewati opening)
+                     # dashboard: http://localhost:5173/dashboard.html
+npm test             # 44 tes (aturan, 3 stage, sesi, analisis, server)
+npm run simulate     # 5 contoh pemain memainkan ketiga stage, lihat profilnya di terminal
+npm run seed         # kirim 5 sesi contoh ke server (dashboard langsung terisi)
+npm run build && npm start   # satu proses: game + dashboard + API di http://localhost:8787
 ```
 
-Open the local URL printed by Vite.
+Nama pemain opsional: `?dev&player=Budi`. Tanpa nama, pemain tercatat anonim (ID acak di browser).
 
-For a production build:
+## Kontrol
 
-```bash
-npm run build
-npm run preview
+| Tombol | Fungsi |
+|---|---|
+| WASD / panah | bergerak |
+| E / Enter / Space | interaksi, konfirmasi, coba lagi setelah gagal |
+| Esc | batal / tutup panel |
+| I | inventori |
+| J | Explorer Journal (penemuan & riwayat keputusan) |
+| 1–9 / Backspace | memasukkan / menghapus simbol di panel teka-teki |
+| M / N | minimap (dengan fog of war) / suara |
+| P | **demo:** pratinjau analisis gaya bermain secara live |
+| ] | **dev (`?dev`):** lompat ke stage berikutnya |
+| B / L | debug: collision / cetak event log ke konsol |
+
+Di mode `?dev`, objek `window.__ioc` (`game`, `gameState`) tersedia di konsol.
+
+## Alur demo (±5 menit)
+
+1. `npm run dev:all`, lalu `npm run seed` di terminal lain.
+2. Buka game `?dev&player=NamaKamu`. Tekan **P** kapan saja untuk melihat profil yang terbentuk.
+3. Mainkan 3 stage (±10–15 menit). Masuk lingkaran emas tujuan → **Selesaikan** atau **Jelajahi dulu** (pilihan ini juga dicatat). Tekan `]` untuk melompati stage saat demo singkat.
+4. Layar akhir: profil, bukti per dimensi, tabel per stage, status "Tersimpan di server".
+5. Buka dashboard: semua sesi, distribusi profil & cara per stage, rata-rata dimensi, detail bukti per pemain.
+
+## Arsitektur
+
+```
+src/data/        stage1–3.js (dunia, tantangan, strategi, tag) · stages.js (registri + validasi)
+                 taxonomy.js (dimensi & gaya) · items.js · assets.js (ukuran & hitbox objek)
+src/systems/     StageSession.js   aturan stage tanpa Phaser (dipakai game, simulasi, tes)
+                 Interaction.js    validasi aksi, konsumsi item, pencatatan keputusan
+                 EventLog.js       event berstempel stage + nomor percobaan
+                 analysis/metrics.js   event → fakta terukur per stage
+                 analysis/profile.js   fakta → profil 5 dimensi + gaya solusi + narasi
+                 Evidence.js       laporan lengkap (schema v2)
+                 Journal.js        isi Explorer Journal
+src/scenes/      StageScene.js     scene generik: input, fisika, efek, minimap, teka-teki, transisi
+                 world.js · ambience.js   pembangun dunia, makhluk, partikel, pencahayaan
+src/art/         textures.js       art prosedural semua objek, tile, partikel
+src/audio/       sound.js          efek suara & ambience sintetis (WebAudio)
+src/sim/         playthrough.js + personas.js   pemain skrip untuk tes & demo
+                 Telemetry.js      kirim event log ke server (+ beacon bila tab ditutup)
+src/ui/          ui.js (HUD, menu, jurnal, panel hasil) · intro.js (opening)
+src/dashboard/   dashboard peneliti (dashboard.html)
+server/          app.js (API) · store.js (file JSON per sesi di data/sessions/) · index.js
 ```
 
-## Controls
+### Backend
 
-- `WASD` or arrow keys: move
-- `E`, `Enter`, or `Space`: interact / confirm
-- `I`: inventory
-- `Esc`: cancel / close
-- `B`: toggle collision debug
-- `L`: print the event log in the browser console
+| Endpoint | Fungsi |
+|---|---|
+| `POST /api/sessions` | `{ sessionId, player, final, log }` → server **menghitung ulang** profil dari event mentah, menyimpan, mengembalikan ringkasan |
+| `GET /api/sessions` | ringkasan semua sesi |
+| `GET /api/sessions/:id` | rekaman lengkap (laporan + event log) |
+| `GET /api/stats` | agregat: jumlah sesi, distribusi profil/cara, rata-rata dimensi |
+| `GET /api/health` | cek server |
 
-## Stage 1 gameplay preserved
+Server tanpa dependensi tambahan (Node bawaan) dan memakai modul analisis yang sama dengan game. Profil dari klien tidak dipercaya. Laporan parsial (tab ditutup sebelum selesai) tidak menimpa laporan final. Data disimpan di `data/sessions/` (diabaikan git; ubah lewat `IOC_DATA_DIR`).
 
-- Search the wreckage and collect useful items.
-- Cross the river by discovering the upstream trail, building a log bridge, or crafting a raft.
-- Swimming in the strong current fails the attempt and offers a restart from the beginning.
-- No energy or timer mechanic is used.
+Prinsip: **semua aturan ada di data + systems**, scene hanya menampilkan. Game dan simulator menghasilkan event yang identik.
 
-## Event log
+## Sistem analisis
 
-The session log begins on the landing page and continues into Stage 1. Narrative events (`landing_opened`, `prologue_started`, `prologue_choice`, `prologue_completed`) remain distinct from gameplay events such as `interact`, `action_attempted`, `action_resolved`, `action_failed`, `challenge_resolved`, and `stage_complete`.
+Setiap aksi/strategi diberi **tag** (`pathfinding`, `craft`, `tool`, `improvise`, `decode`, `risk`, `observe`, `gather`, `collect`). Mesin analisis hanya membaca tag dan struktur data stage, jadi otomatis berlaku untuk stage baru.
 
-The current project still uses placeholder world art. The landing page uses CSS-generated atmospheric scenery so it can be replaced or refined later without changing gameplay logic.
+| Dimensi | Kutub (− / +) | Bukti utama |
+|---|---|---|
+| Eksplorasi | Terfokus / Penjelajah | penemuan, cakupan peta, tantangan opsional, tetap menjelajah setelah tujuan terbuka |
+| Informasi | Pencoba langsung / Pengamat | petunjuk yang dibaca **sebelum** keputusan, keputusan yang sejalan dengan petunjuk, kegagalan, tebakan teka-teki |
+| Tempo | Cepat bertindak / Penuh pertimbangan | waktu & jumlah interaksi sebelum percobaan pertama |
+| Barang | Hemat / Pengumpul | barang diambil vs dipakai, barang koleksi, barang bawaan yang berguna di stage berikutnya |
+| Kegagalan | Gigih / Adaptif | setelah gagal: ganti cara atau ulangi cara yang sama |
 
-## Phase 5.1 — revised opening flow
+Setiap dimensi punya skor −1..1, **tingkat keyakinan** (rendah/sedang/tinggi, dari jumlah bukti dan konsistensi antar stage), dan daftar bukti yang bisa dibaca. Judul profil = gaya solusi dominan + dimensi terkuat, misalnya *"Pencari Jalur yang Gemar Menjelajah"*. Laporan terakhir juga disimpan di `localStorage` (`ioc:lastReport`).
 
-The first-visit flow is now:
+Rujukan konsep: Evidence-Centered Design (Mislevy) dan *stealth assessment* (Shute).
 
-`Cinematic Opening (22s; Skip unlocks after 10s) → Illustrated Storyboard (4 slides) → Landing Page → Start / Play → Stage 1`
+## Menambah atau mengubah stage
 
-The cinematic opening and storyboard artwork are lightweight CSS placeholders. Replace them with final MP4 and illustration assets when the art team is ready. The storyboard must still be completed after skipping the opening.
+1. Salin skema `src/data/stage2.js` (`challenges` + `gates` + `strategies` dengan `tags`/`informedBy`, `zones`, `ground`, `water`, `walls`, `objects`, `goal`, `ambience`).
+2. Daftarkan di `RAW_STAGES` pada `src/data/stages.js`. `prepareStage` memvalidasi referensi saat start.
+3. Mekanik yang tersedia lewat data: `requires.choices` (bahan alternatif), `puzzle`, `risky` (aman bersyarat), `outcome: "fatal"`, `hideIfFlags`, `moveTo`, efek `stash`/`unstash`.
+4. Setiap tantangan utama butuh strategi dengan tag berbeda agar dimensi bisa membedakan pemain. Tambahkan persona di `src/sim/personas.js` untuk mengujinya.
 
-See `CHANGELOG_FASE5.1.md` and `PHASE5_1_TEST_CHECKLIST.md` for details and demo checks.
+Dokumen fase lama ada di `docs/archive/`.

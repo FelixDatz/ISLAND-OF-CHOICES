@@ -237,7 +237,10 @@ function showHowToPlay() {
     ["W A S D / ARROW KEYS", "Move around the island."],
     ["E / ENTER", "Interact with nearby objects and choose actions."],
     ["I", "Open or close your inventory."],
+    ["J", "Open or close the Explorer Journal."],
     ["ESC", "Cancel an interaction or close a panel."],
+    ["M / N", "Toggle the minimap / toggle sound."],
+    ["P", "Demo tool: preview the live play-style analysis."],
     ["B / L", "Developer tools: toggle collision view / print event log."]
   ].forEach(([key, desc]) => {
     const row = $("div", "control-row");
