@@ -85,7 +85,7 @@ function render() {
   const s = state.stats;
   app.replaceChildren(h("div", { class: "wrap" },
     h("header", { class: "top" },
-      h("div", {}, h("h1", {}, "Island of Choices · Dashboard"), h("p", { class: "muted" }, "Profil gaya bermain dihitung ulang di server dari event log mentah.")),
+      h("div", {}, h("h1", {}, "Island of Choices · Dasbor"), h("p", { class: "muted" }, "Profil gaya bermain dihitung ulang di server dari event log mentah.")),
       h("div", {}, h("button", { onclick: refresh }, "Muat ulang"), " ", h("a", { class: "btn", href: "/?dev" }, "Buka game"))),
     state.error ? h("p", { class: "error" }, state.error) : null,
     s ? h("div", { class: "cards" },

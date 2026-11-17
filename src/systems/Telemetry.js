@@ -4,7 +4,7 @@
 const ENDPOINT = "/api/sessions";
 const PLAYER_KEY = "ioc:playerId";
 const NAME_KEY = "ioc:playerName";
-const CLIENT_VERSION = "0.3.0";
+const CLIENT_VERSION = "1.0.0";
 
 function uuid() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -34,6 +34,22 @@ export function newSession() {
   return sessionId;
 }
 
+/** Melanjutkan sesi tersimpan (fitur Lanjutkan) agar laporan tetap satu sesi. */
+export function resumeSession(id) {
+  if (typeof id === "string" && id.length >= 6) sessionId = id;
+  finalSent = false;
+}
+
+/** Nama penjelajah dari layar mulai (opsional). */
+export function setPlayerName(name) {
+  const clean = String(name || "").trim().slice(0, 40);
+  storage("set", NAME_KEY, clean);
+}
+
+export function getPlayerName() {
+  return storage("get", NAME_KEY) || "";
+}
+
 /** Pemain anonim (ID tersimpan di browser). Nama opsional lewat URL ?player=Nama */
 export function getPlayer() {
   let id = storage("get", PLAYER_KEY);
@@ -48,7 +64,7 @@ export function getPlayer() {
     name = null;
   }
   if (name) storage("set", NAME_KEY, name);
-  else name = storage("get", NAME_KEY);
+  else name = storage("get", NAME_KEY) || null;
   return { id, name: name ? name.slice(0, 40) : null };
 }
 

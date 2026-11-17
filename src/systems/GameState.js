@@ -5,7 +5,7 @@ import { now } from "./Clock.js";
 export function createState() {
   return {
     stageId: null,       // stage yang sedang dimainkan
-    attempt: 0,          // nomor percobaan di stage ini (naik setelah Try Again)
+    attempt: 0,          // nomor percobaan di stage ini (naik setelah mencoba lagi)
     inventory: {},       // { rope: 1, driftwood: 3 }
     flags: {},           // { wreck_searched: true }
     doneActions: {},     // { "wreck.search": true } untuk aksi sekali pakai

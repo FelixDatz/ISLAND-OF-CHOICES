@@ -1,8 +1,8 @@
 # Island of Choices
 
-Game petualangan edukatif berbasis eksplorasi (Phaser 3 + Vite). Setiap tantangan bisa diselesaikan dengan banyak cara. Di akhir permainan, sistem menganalisis tindakan pemain dan menggambarkan **gaya bermainnya** berdasarkan bukti, bukan skor benar-salah.
+Game petualangan edukatif berbasis eksplorasi (Phaser 3 + Vite), sepenuhnya berbahasa Indonesia. Setiap tantangan bisa diselesaikan dengan banyak cara. Di akhir permainan, sistem menganalisis tindakan pemain dan menggambarkan **gaya bermainnya** berdasarkan bukti, bukan skor benar-salah.
 
-Status: **3 stage lengkap & bisa dimainkan dari awal sampai akhir.** Art dibuat prosedural (tanpa file gambar), suara disintesis (WebAudio). Keduanya bisa diganti aset final tanpa mengubah logika.
+Status: **3 stage lengkap & bisa dimainkan dari awal sampai akhir**, lengkap dengan bagian depan (layar pembuka, sinematik, menu utama, cerita, pengaturan), menu jeda, dan simpan/lanjutkan. Art dibuat prosedural (tanpa file gambar). Suara memakai file di `src/assets/audio/` bila ada, selain itu disintesis (lihat [Audio](#audio)).
 
 | Stage | Tantangan utama | Cara menyelesaikan |
 |---|---|---|
@@ -25,7 +25,7 @@ npm run seed         # kirim 5 sesi contoh ke server (dashboard langsung terisi)
 npm run build && npm start   # satu proses: game + dashboard + API di http://localhost:8787
 ```
 
-Nama pemain opsional: `?dev&player=Budi`. Tanpa nama, pemain tercatat anonim (ID acak di browser).
+Alur normal (`http://localhost:5173/`): layar pembuka → sinematik (bisa dilewati) → menu utama → isi nama (opsional) → cerita (bisa dilewati) → Stage 1. Progres tersimpan otomatis di awal setiap stage; menu utama menampilkan **Lanjutkan** bila ada progres.
 
 ## Kontrol
 
@@ -33,12 +33,12 @@ Nama pemain opsional: `?dev&player=Budi`. Tanpa nama, pemain tercatat anonim (ID
 |---|---|
 | WASD / panah | bergerak |
 | E / Enter / Space | interaksi, konfirmasi, coba lagi setelah gagal |
-| Esc | batal / tutup panel |
+| Esc | batal / tutup panel / **menu jeda** (lanjutkan, kontrol, suara, kembali ke menu) |
 | I | inventori |
 | J | Explorer Journal (penemuan & riwayat keputusan) |
 | 1–9 / Backspace | memasukkan / menghapus simbol di panel teka-teki |
 | M / N | minimap (dengan fog of war) / suara |
-| P | **demo:** pratinjau analisis gaya bermain secara live |
+| P | **dev (`?dev`):** pratinjau analisis gaya bermain secara live |
 | ] | **dev (`?dev`):** lompat ke stage berikutnya |
 | B / L | debug: collision / cetak event log ke konsol |
 
@@ -47,7 +47,7 @@ Di mode `?dev`, objek `window.__ioc` (`game`, `gameState`) tersedia di konsol.
 ## Alur demo (±5 menit)
 
 1. `npm run dev:all`, lalu `npm run seed` di terminal lain.
-2. Buka game `?dev&player=NamaKamu`. Tekan **P** kapan saja untuk melihat profil yang terbentuk.
+2. Buka `http://localhost:5173/` untuk alur lengkap, atau `?dev` untuk langsung ke Stage 1 (tekan **P** untuk melihat profil yang terbentuk).
 3. Mainkan 3 stage (±10–15 menit). Masuk lingkaran emas tujuan → **Selesaikan** atau **Jelajahi dulu** (pilihan ini juga dicatat). Tekan `]` untuk melompati stage saat demo singkat.
 4. Layar akhir: profil, bukti per dimensi, tabel per stage, status "Tersimpan di server".
 5. Buka dashboard: semua sesi, distribusi profil & cara per stage, rata-rata dimensi, detail bukti per pemain.
@@ -67,10 +67,13 @@ src/systems/     StageSession.js   aturan stage tanpa Phaser (dipakai game, simu
 src/scenes/      StageScene.js     scene generik: input, fisika, efek, minimap, teka-teki, transisi
                  world.js · ambience.js   pembangun dunia, makhluk, partikel, pencahayaan
 src/art/         textures.js       art prosedural semua objek, tile, partikel
-src/audio/       sound.js          efek suara & ambience sintetis (WebAudio)
+src/audio/       sound.js · manifest.js   musik/suasana/efek: file bila ada, sintetis bila tidak
+src/assets/audio/  tempat file suara tim (lihat DAFTAR_SUARA.md)
 src/sim/         playthrough.js + personas.js   pemain skrip untuk tes & demo
                  Telemetry.js      kirim event log ke server (+ beacon bila tab ditutup)
-src/ui/          ui.js (HUD, menu, jurnal, panel hasil) · intro.js (opening)
+src/ui/          ui.js (HUD, jurnal, teka-teki, jeda, hasil) · intro.js + intro.css (bagian depan)
+src/systems/SaveGame.js   simpan otomatis per stage untuk fitur Lanjutkan
+src/data/credits.js       nama tim & sumber aset untuk menu Tentang
 src/dashboard/   dashboard peneliti (dashboard.html)
 server/          app.js (API) · store.js (file JSON per sesi di data/sessions/) · index.js
 ```
@@ -88,6 +91,10 @@ server/          app.js (API) · store.js (file JSON per sesi di data/sessions/)
 Server tanpa dependensi tambahan (Node bawaan) dan memakai modul analisis yang sama dengan game. Profil dari klien tidak dipercaya. Laporan parsial (tab ditutup sebelum selesai) tidak menimpa laporan final. Data disimpan di `data/sessions/` (diabaikan git; ubah lewat `IOC_DATA_DIR`).
 
 Prinsip: **semua aturan ada di data + systems**, scene hanya menampilkan. Game dan simulator menghasilkan event yang identik.
+
+## Audio
+
+Taruh file suara di `src/assets/audio/{music,ambience,sfx}/` dengan nama sesuai **[DAFTAR_SUARA.md](src/assets/audio/DAFTAR_SUARA.md)** (26 file: 7 musik, 3 suasana, 16 efek; semuanya opsional). Format disarankan `.mp3`. Game otomatis memakai file yang ada; sisanya memakai suara sintetis. Jumlah file yang terdeteksi terlihat di **Pengaturan**. Volume per file diatur di `src/audio/manifest.js`; volume pemain (utama/musik/efek) tersimpan di browser.
 
 ## Sistem analisis
 

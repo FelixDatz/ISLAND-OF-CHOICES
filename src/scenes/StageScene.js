@@ -6,8 +6,9 @@ import { StageSession, zoneAt, cellKey } from "../systems/StageSession.js";
 import { listActions, itemLabel } from "../systems/Interaction.js";
 import { buildJournalSnapshot } from "../systems/Journal.js";
 import { buildEvidenceReport } from "../systems/Evidence.js";
-import { submitSession, newSession as newTelemetrySession } from "../systems/Telemetry.js";
-import { sfx, setAmbience, unlockAudio, toggleMute } from "../audio/sound.js";
+import { submitSession, newSession as newTelemetrySession, getSessionId } from "../systems/Telemetry.js";
+import { saveProgress, clearProgress } from "../systems/SaveGame.js";
+import { sfx, setAmbience, unlockAudio, toggleMute, playMusic } from "../audio/sound.js";
 import * as ui from "../ui/ui.js";
 import { buildGround, buildWater, buildWalls, scatterDecor, buildObjects, buildGates, openGate, drawCrossingVisual, buildGoal } from "./world.js";
 import { buildAmbience, buildLighting } from "./ambience.js";
@@ -80,8 +81,20 @@ export default class StageScene extends Phaser.Scene {
     this.updateZoneContext();
     this.visitCell(true);
 
-    setAmbience(this.stage.ambience?.sound);
-    if (this.session.state.attempt > 1) {
+    setAmbience(this.stage.ambience?.sound || null);
+    playMusic(this.stage.music || null);
+    this.updateObjective();
+    saveProgress({
+      stageId: this.stage.id,
+      stageName: this.stage.name,
+      attempt: this.session.state.attempt,
+      inventory: { ...this.session.startInventory },
+      log: [...gameState.log],
+      sessionId: getSessionId()
+    });
+    if (data.reason === "resume") {
+      ui.toast(`Melanjutkan ${this.stage.name} dari awal stage`);
+    } else if (this.session.state.attempt > 1) {
       ui.toast(`Percobaan ke-${this.session.state.attempt}`);
     } else {
       ui.showStageCard(this.stage.intro || { kicker: `STAGE ${stageIndex(this.stage.id) + 1}`, title: this.stage.name });
@@ -204,10 +217,11 @@ export default class StageScene extends Phaser.Scene {
     on("ESC", () => this.onCancel());
     on("I", () => this.toggleInventory());
     on("J", () => this.toggleJournal());
-    on("P", () => this.toggleAnalysisPreview());
+    const dev = !!window.__ioc;
+    if (dev) on("P", () => this.toggleAnalysisPreview());
     on("M", () => this.toggleMinimap());
     on("N", () => ui.toast(toggleMute() ? "Suara dimatikan" : "Suara dinyalakan"));
-    if (window.__ioc) on("CLOSED_BRACKET", () => this.devSkipStage());
+    if (dev) on("CLOSED_BRACKET", () => this.devSkipStage());
     on("UP", () => this.onNav(-1));
     on("W", () => this.onNav(-1));
     on("DOWN", () => this.onNav(1));
@@ -253,11 +267,15 @@ export default class StageScene extends Phaser.Scene {
       this.puzzleSubmit();
     } else if (this.mode === "gameover") {
       this.retryFromStart();
+    } else if (this.mode === "pause") {
+      ui.pausePick();
     }
   }
 
   onCancel() {
-    if (this.mode === "menu") this.cancelMenu();
+    if (this.mode === "play") this.openPause();
+    else if (this.mode === "pause") this.closePause();
+    else if (this.mode === "menu") this.cancelMenu();
     else if (this.mode === "dialog") this.closeDialog();
     else if (this.mode === "puzzle") this.closePuzzle();
     else if (this.mode === "inventory") this.toggleInventory();
@@ -266,6 +284,11 @@ export default class StageScene extends Phaser.Scene {
   }
 
   onNav(dir) {
+    if (this.mode === "pause") {
+      ui.setPauseSelected(this.pauseIndex = (this.pauseIndex || 0) + dir);
+      sfx.ui();
+      return;
+    }
     if (this.mode !== "menu") return;
     const count = this.menu.options.length;
     this.menu.selected = (this.menu.selected + dir + count) % count;
@@ -277,6 +300,46 @@ export default class StageScene extends Phaser.Scene {
     const visible = !this.mini.visible;
     this.mini.setVisible(visible);
     this.miniFrame.setVisible(visible);
+  }
+
+  // ---------- menu jeda ----------
+
+  openPause() {
+    this.setMode("pause");
+    this.pauseIndex = 0;
+    this.physics.pause();
+    this.tweens.pauseAll();
+    sfx.open();
+    this.session.panelOpened("pause");
+    ui.showPause({
+      onResume: () => this.closePause(),
+      onMenu: () => this.returnToMenu()
+    });
+  }
+
+  closePause() {
+    if (this.mode !== "pause") return;
+    ui.hidePause();
+    this.physics.resume();
+    this.tweens.resumeAll();
+    sfx.close();
+    this.setMode("play");
+  }
+
+  /** Kembali ke menu utama (progres tersimpan di awal stage). */
+  returnToMenu() {
+    this.physics.resume();
+    this.tweens.resumeAll();
+    ui.hideAllPanels();
+    this.mode = "menu-exit";
+    setAmbience(null);
+    window.dispatchEvent(new CustomEvent("ioc:return-to-menu"));
+  }
+
+  updateObjective() {
+    const o = this.stage.objective;
+    if (!o) return ui.setObjective(null);
+    ui.setObjective(this.session.isGoalUnlocked() ? o.after : o.before);
   }
 
   // ---------- menu generik ----------
@@ -435,6 +498,7 @@ export default class StageScene extends Phaser.Scene {
     const unlocked = this.session.isGoalUnlocked();
     this.goalFx.setUnlocked(unlocked);
     this.miniGoal?.setVisible(unlocked);
+    this.updateObjective();
   }
 
   // ---------- efek ----------
@@ -662,6 +726,9 @@ export default class StageScene extends Phaser.Scene {
   }
 
   showEnding() {
+    clearProgress();
+    playMusic("ending");
+    setAmbience(null);
     this.cameras.main.fadeIn(1200, 0, 0, 0);
     ui.showStageCard({
       kicker: "AKHIR PERJALANAN",
@@ -681,7 +748,8 @@ export default class StageScene extends Phaser.Scene {
     this.setMode("result");
     ui.showResult(report, {
       onDownload: () => ui.downloadJson("island-of-choices-report.json", report),
-      onRestart: () => this.newSession()
+      onRestart: () => this.newSession(),
+      onMenu: () => this.returnToMenu()
     });
     ui.setResultStatus("Menyimpan ke server…");
     submitSession(gameState.log).then((r) => {
@@ -693,6 +761,7 @@ export default class StageScene extends Phaser.Scene {
 
   newSession() {
     ui.hideResult();
+    clearProgress();
     newTelemetrySession();
     this.mode = "restarting";
     this.scene.restart({ stageId: firstStageId(), priorLog: [], startedAt: Date.now(), attempt: 1, reason: "new_session", inventory: {} });

@@ -94,7 +94,7 @@ export function computeStageMetrics(allEvents, stage) {
     adaptations.push({ from: f.strategy, to: next.strategy, fromLabel: label(f.strategy), toLabel: label(next.strategy), failedEventId: f.eventId, nextEventId: next.eventId });
   }
 
-  // ---- barang (percobaan terakhir saja, karena dunia di-reset saat Try Again) ----
+  // ---- barang (percobaan terakhir saja, karena dunia di-reset saat mencoba lagi) ----
   const finalResolved = ofType(ev, "action_resolved").filter((e) => e.attempt === finalAttempt);
   const collected = uniq(finalResolved.flatMap((e) => e.gained || []));
   const used = new Set(finalResolved.flatMap((e) => e.usedItems || []));
@@ -122,7 +122,7 @@ export function computeStageMetrics(allEvents, stage) {
     stageId: stage.id,
     stageName: stage.name,
     completed: !!complete,
-    attempts: starts.length,
+    attempts: starts.filter((e) => e.restartReason !== "resume").length || starts.length,
     finalAttempt,
     durationMs: firstStart && endEvent ? endEvent.t - firstStart.t : 0,
     distance: Math.round(distance),

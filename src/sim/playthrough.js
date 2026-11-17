@@ -11,7 +11,7 @@ import { StageSession } from "../systems/StageSession.js";
  *   ["cover", rasio]              menandai sebagian peta sebagai sudah dijelajahi
  *   ["wait", ms]                  jeda berpikir
  *   ["do", objectId, actionId]    buka interaksi lalu jalankan aksi
- *                                 (fatal → otomatis Try Again; setback → lanjut)
+ *                                 (fatal → otomatis mencoba lagi; setback → lanjut)
  *   ["puzzle", objectId, actionId, [simbol...]]  satu percobaan teka-teki
  *   ["look", objectId]            buka menu lalu batal
  *   ["blocked", objectId, actionId]  memilih aksi yang masih terkunci

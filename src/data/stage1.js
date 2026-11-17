@@ -28,8 +28,11 @@ export const STAGE1 = {
       { kind: "fish", count: 6, area: { x: 1110, y: 90, w: 230, h: 1320 } },
       { kind: "bird", count: 3 }
     ],
-    sound: "beach"
+    sound: "pantai"
   },
+
+  music: "stage1_pantai",
+  objective: { before: "Cari cara menyeberangi sungai.", after: "Ikuti jalan setapak ke lingkaran emas di timur." },
 
   // Tantangan & strategi. `informedBy` = penemuan yang relevan, dipakai untuk
   // menilai apakah keputusan diambil setelah mengamati.
@@ -57,10 +60,10 @@ export const STAGE1 = {
 
   // Zona memberi orientasi ringan tanpa mengunci eksplorasi atau menunjuk satu solusi.
   zones: [
-    { id: "shore", title: "THE SHORE", hint: "Puing kapal dan garis pantai mungkin menyimpan sesuatu yang berguna.", bounds: { x: 0, y: 70, w: 420, h: 1360 } },
-    { id: "wilderness", title: "THE WILDERNESS", hint: "Amati pepohonan, semak, dan jejak kecil di antara vegetasi.", bounds: { x: 420, y: 70, w: 610, h: 1360 } },
-    { id: "riverbank", title: "THE RIVERBANK", hint: "Arus terlihat kuat. Petunjuk di sekitar tepi sungai bisa memberi arah.", bounds: { x: 1030, y: 70, w: 320, h: 1360 } },
-    { id: "far_side", title: "THE FAR SIDE", hint: "Kamu sudah di seberang. Jalan setapak di timur mengarah ke hutan.", bounds: { x: 1350, y: 70, w: 960, h: 1360 } }
+    { id: "shore", title: "PANTAI", hint: "Puing kapal dan garis pantai mungkin menyimpan sesuatu yang berguna.", bounds: { x: 0, y: 70, w: 420, h: 1360 } },
+    { id: "wilderness", title: "HUTAN KECIL", hint: "Amati pepohonan, semak, dan jejak kecil di antara vegetasi.", bounds: { x: 420, y: 70, w: 610, h: 1360 } },
+    { id: "riverbank", title: "TEPI SUNGAI", hint: "Arus terlihat kuat. Petunjuk di sekitar tepi sungai bisa memberi arah.", bounds: { x: 1030, y: 70, w: 320, h: 1360 } },
+    { id: "far_side", title: "SEBERANG SUNGAI", hint: "Kamu sudah di seberang. Jalan setapak di timur mengarah ke hutan.", bounds: { x: 1350, y: 70, w: 960, h: 1360 } }
   ],
 
   // Lantai visual (tile prosedural), digambar berurutan.

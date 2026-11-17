@@ -1,5 +1,8 @@
+import { getSettings, setSetting, audioStatus } from "../audio/sound.js";
+
 // Lapisan UI HTML di atas canvas. Logika permainan tetap berada di scene/systems.
 
+let locationObjective, pauseEl;
 let hintEl, locationEl, locationTitle, locationHint, promptEl, promptLabel, toastBox, dialogEl, dialogText;
 let menuEl, menuTitle, menuList, menuButtons = [];
 let invEl, invList;
@@ -34,7 +37,8 @@ export function mountUi() {
   locationEl = el("section", "hud-location");
   locationTitle = el("strong", "hud-location-title");
   locationHint = el("span", "hud-location-hint");
-  locationEl.append(locationTitle, locationHint);
+  locationObjective = el("span", "hud-location-objective");
+  locationEl.append(locationTitle, locationHint, locationObjective);
   promptEl = el("div", "ui-prompt");
   promptEl.hidden = true;
   promptEl.append(el("kbd", "", "E"));
@@ -63,7 +67,7 @@ export function mountUi() {
   journalEl.hidden = true;
   const journalHeader = el("header", "ui-journal-header");
   const journalHeading = el("div", "ui-journal-heading");
-  journalHeading.append(el("h2", "ui-journal-title", "Explorer Journal"), el("p", "ui-journal-subtitle", "Catatan penemuan dan keputusan selama perjalanan."));
+  journalHeading.append(el("h2", "ui-journal-title", "Jurnal Penjelajah"), el("p", "ui-journal-subtitle", "Catatan penemuan dan keputusan selama perjalanan."));
   journalClose = el("button", "ui-journal-close", "Tutup");
   journalClose.type = "button";
   journalHeader.append(journalHeading, journalClose);
@@ -84,12 +88,14 @@ export function mountUi() {
 
   resultEl = el("section", "ui-panel ui-result");
   resultEl.hidden = true;
+  pauseEl = el("section", "ui-panel ui-pause");
+  pauseEl.hidden = true;
   puzzleEl = el("section", "ui-panel ui-puzzle");
   puzzleEl.hidden = true;
   stageCardEl = el("div", "ui-stage-card");
   stageCardEl.hidden = true;
 
-  root.append(hintEl, locationEl, promptEl, toastBox, dialogEl, menuEl, invEl, journalEl, gameOverEl, resultEl, puzzleEl, stageCardEl);
+  root.append(hintEl, locationEl, promptEl, toastBox, dialogEl, menuEl, invEl, journalEl, gameOverEl, resultEl, puzzleEl, stageCardEl, pauseEl);
 }
 
 export function showLocation(title, hint) {
@@ -97,6 +103,12 @@ export function showLocation(title, hint) {
   locationTitle.textContent = title || "";
   locationHint.textContent = hint || "";
   locationEl.hidden = !title;
+}
+
+export function setObjective(text) {
+  if (!locationObjective) return;
+  locationObjective.textContent = text ? `Tujuan: ${text}` : "";
+  locationObjective.hidden = !text;
 }
 
 export function showPrompt(label) {
@@ -248,7 +260,7 @@ function dimensionRow(d) {
   return row;
 }
 
-export function showResult(report, { preview = false, onClose, onDownload, onRestart } = {}) {
+export function showResult(report, { preview = false, onClose, onDownload, onRestart, onMenu } = {}) {
   const { profile } = report;
   resultEl.replaceChildren();
 
@@ -301,6 +313,12 @@ export function showResult(report, { preview = false, onClose, onDownload, onRes
     close.type = "button";
     close.onclick = onClose;
     footer.append(close);
+  }
+  if (!preview && onMenu) {
+    const menu = el("button", "ui-journal-close", "Menu utama");
+    menu.type = "button";
+    menu.onclick = onMenu;
+    footer.append(menu);
   }
   if (!preview && onRestart) {
     const restart = el("button", "ui-result-restart", "Main lagi");
@@ -411,4 +429,124 @@ export function hideStageCard() {
 
 export function floatingNote(text) {
   toast(text);
+}
+
+// ---------- Pengaturan audio (dipakai di menu jeda & menu utama) ----------
+
+export function buildAudioSettings() {
+  const wrap = el("div", "ui-audio-settings");
+  const current = getSettings();
+  const slider = (key, label) => {
+    const row = el("label", "ui-audio-row");
+    const input = el("input");
+    input.type = "range";
+    input.min = "0";
+    input.max = "100";
+    input.value = String(Math.round(current[key] * 100));
+    const value = el("span", "ui-audio-value", `${input.value}%`);
+    input.addEventListener("input", () => {
+      setSetting(key, Number(input.value) / 100);
+      value.textContent = `${input.value}%`;
+    });
+    row.append(el("span", "ui-audio-label", label), input, value);
+    return row;
+  };
+  const mute = el("label", "ui-audio-row ui-audio-mute");
+  const box = el("input");
+  box.type = "checkbox";
+  box.checked = current.muted;
+  box.addEventListener("change", () => setSetting("muted", box.checked));
+  mute.append(box, el("span", "ui-audio-label", "Bisukan semua suara (N)"));
+  const status = audioStatus();
+  wrap.append(
+    slider("master", "Volume utama"),
+    slider("music", "Musik"),
+    slider("sfx", "Efek & suasana"),
+    mute,
+    el("p", "ui-audio-status", status.found
+      ? `File suara ditemukan: ${status.found} dari ${status.total}. Sisanya memakai suara sintetis.`
+      : `Belum ada file suara (0 dari ${status.total}). Memakai suara sintetis bawaan.`)
+  );
+  return wrap;
+}
+
+// ---------- Menu jeda ----------
+
+let pauseButtons = [];
+let pauseSelected = 0;
+
+export function showPause({ onResume, onControls, onMenu }) {
+  pauseEl.replaceChildren();
+  pauseEl.append(el("h2", "ui-pause-title", "Permainan dijeda"));
+  const list = el("div", "ui-pause-list");
+  const items = [
+    ["Lanjutkan", onResume],
+    ["Kontrol & tips", () => showPauseSection("controls")],
+    ["Suara", () => showPauseSection("audio")],
+    ["Kembali ke menu utama", () => showPauseSection("confirm")]
+  ];
+  pauseButtons = items.map(([label, fn]) => {
+    const b = el("button", "ui-option", label);
+    b.type = "button";
+    b.addEventListener("mousedown", (e) => e.preventDefault());
+    b.addEventListener("click", fn);
+    list.append(b);
+    return b;
+  });
+  const section = el("div", "ui-pause-section");
+  pauseEl.append(list, section, el("span", "ui-foot", "Esc untuk melanjutkan · ↑↓ dan E untuk memilih"));
+
+  function showPauseSection(kind) {
+    section.replaceChildren();
+    if (kind === "controls") {
+      onControls?.();
+      const rows = [
+        ["WASD / panah", "bergerak"], ["E / Enter / Spasi", "berinteraksi, memilih"], ["Esc", "batal / jeda"],
+        ["I", "inventori"], ["J", "jurnal penjelajah"], ["M", "minimap"], ["N", "suara on/off"], ["1–9, Backspace", "panel teka-teki"]
+      ];
+      const table = el("div", "ui-pause-controls");
+      for (const [k, v] of rows) table.append(el("kbd", "", k), el("span", "", v));
+      section.append(table, el("p", "ui-pause-tip", "Tidak ada satu jawaban yang benar. Amati sekitar, coba berbagai cara, dan ikuti rasa penasaranmu."));
+    } else if (kind === "audio") {
+      section.append(buildAudioSettings());
+    } else if (kind === "confirm") {
+      const yes = el("button", "ui-result-restart", "Ya, ke menu utama");
+      yes.type = "button";
+      yes.onclick = onMenu;
+      section.append(el("p", "ui-pause-tip", "Progres tersimpan otomatis di awal stage ini. Kamu bisa memilih Lanjutkan dari menu utama."), yes);
+    }
+  }
+  setPauseSelected(0);
+  pauseEl.hidden = false;
+}
+
+export function setPauseSelected(index) {
+  pauseSelected = (index + pauseButtons.length) % pauseButtons.length;
+  pauseButtons.forEach((b, i) => b.classList.toggle("is-selected", i === pauseSelected));
+  return pauseSelected;
+}
+
+export function pausePick() {
+  pauseButtons[pauseSelected]?.click();
+}
+
+export function hidePause() {
+  if (!pauseEl) return;
+  pauseEl.hidden = true;
+  pauseEl.replaceChildren();
+  pauseButtons = [];
+}
+
+/** Menyembunyikan semua panel gameplay (saat kembali ke menu utama). */
+export function hideAllPanels() {
+  hideDialog();
+  hideMenu();
+  hideInventory();
+  hideJournal();
+  hideGameOver();
+  hideResult();
+  hidePuzzle();
+  hidePause();
+  hideStageCard();
+  showPrompt(null);
 }
