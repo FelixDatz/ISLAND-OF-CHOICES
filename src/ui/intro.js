@@ -2,7 +2,7 @@ import { createState } from "../systems/GameState.js";
 import { logEvent } from "../systems/EventLog.js";
 import { getPlayerName, setPlayerName } from "../systems/Telemetry.js";
 import { clearProgress } from "../systems/SaveGame.js";
-import { unlockAudio, playMusic, sfx } from "../audio/sound.js";
+import { unlockAudio, playMusic, setAmbience, sfx } from "../audio/sound.js";
 import { buildAudioSettings } from "./ui.js";
 import { CREDITS } from "../data/credits.js";
 
@@ -116,6 +116,10 @@ function buildBackdrop() {
 
 function showSplash() {
   setScreen("splash");
+  // Lagu kiriman pengguna menjadi tema layar judul awal.
+  // Browser baru mengizinkan audio setelah klik/tekan tombol pertama.
+  playMusic("title_menu");
+  setAmbience(null);
   const box = $("main", "io-splash");
   box.append(
     $("p", "io-kicker", "SEBUAH PETUALANGAN INTERAKTIF"),
@@ -145,7 +149,10 @@ function titleBlock(size = "") {
 
 function showOpening() {
   setScreen("opening");
-  playMusic("opening");
+  // Lagu yang sama tetap berjalan dari Splash melewati cinematic hingga Lobby.
+  // Suara kapal/badai/karam ditambahkan sebagai ambience dan SFX per adegan.
+  playMusic("title_menu");
+  setAmbience(null);
   const t0 = Date.now();
   log("cinematic_intro_started", { scenes: OPENING_SCENES.length });
   const caption = $("p", "io-caption");
@@ -174,8 +181,24 @@ function showOpening() {
       void caption.offsetWidth;
       caption.textContent = scene.text;
       caption.classList.add("is-in");
+
+      const sceneAudio = {
+        "scene-voyage": "voyage",
+        "scene-storm": "storm",
+        "scene-wreck": "wreck",
+        "scene-island": "island"
+      };
+      setAmbience(sceneAudio[scene.cls] || null);
+
+      if (scene.cls === "scene-voyage") later(950, () => sfx.gull());
       if (scene.cls === "scene-storm") later(1400, () => sfx.rumble());
-      if (scene.cls === "scene-wreck") later(500, () => sfx.splash());
+      if (scene.cls === "scene-wreck") {
+        later(180, () => sfx.shipCreak());
+        later(600, () => sfx.woodBreak());
+        later(1050, () => sfx.waveCrash());
+        later(1650, () => sfx.splash());
+      }
+      if (scene.cls === "scene-island") later(850, () => sfx.gull());
     });
   });
   later(OPENING_SCENES.length * SCENE_MS, () => {
@@ -222,7 +245,10 @@ function menuList(items, { onBack } = {}) {
 
 function showMenu() {
   setScreen("menu");
-  playMusic("menu");
+  // Lagu yang sama seperti Splash Screen, diputar looping di Lobby.
+  playMusic("title_menu");
+  // Lobby hanya memakai lagu utama; ambience storyboard tidak ikut menimpa.
+  setAmbience(null);
   introState = createState();
   log("menu_opened", {});
   const save = handlers.getSave?.();
@@ -294,8 +320,22 @@ function illustration(scene) {
 
 function showStory({ fromMenu, index = 0 }) {
   setScreen("story");
-  playMusic("cerita");
+  // Hentikan lagu Splash/Lobby begitu masuk ke empat slide cerita.
+  // Fade singkat menjaga perpindahan tetap halus; setiap slide punya ambience sendiri.
+  playMusic(null, { fade: 650 });
   const slide = STORY[index];
+  setAmbience(slide.scene);
+
+  // Efek kejadian hanya dimainkan saat masuk ke slide terkait.
+  if (slide.scene === "voyage") later(700, () => sfx.gull());
+  if (slide.scene === "storm") later(500, () => sfx.rumble());
+  if (slide.scene === "wreck") {
+    later(180, () => sfx.shipCreak());
+    later(620, () => sfx.woodBreak());
+    later(1050, () => sfx.waveCrash());
+    later(1550, () => sfx.splash());
+  }
+  if (slide.scene === "island") later(800, () => sfx.gull());
   log("storyboard_slide_viewed", { slide: index + 1, scene: slide.scene, fromMenu });
 
   const top = $("header", "io-story-top");

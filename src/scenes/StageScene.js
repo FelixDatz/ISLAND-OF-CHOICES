@@ -890,7 +890,8 @@ export default class StageScene extends Phaser.Scene {
         this.stepDist += moved;
         if (this.stepDist > 52) {
           this.stepDist = 0;
-          sfx.step();
+          const surface = this.stage.id === "stage2" ? "daun" : this.stage.id === "stage3" ? "batu" : "pasir";
+          sfx.step(surface);
         }
       }
       this.updateZoneContext();

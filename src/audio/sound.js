@@ -1,3 +1,4 @@
+import menuTrackAssetUrl from "../assets/audio/music/01_exploring_the_ocean.ogg?url";
 import { MUSIC, AMBIENCE, SFX } from "./manifest.js";
 
 // Audio game: memakai file di src/assets/audio bila ada, dan suara sintetis
@@ -13,6 +14,10 @@ const EXT_ORDER = ["mp3", "ogg", "m4a", "wav"];
 const SETTINGS_KEY = "ioc:audio";
 
 export function urlFor(file) {
+  // Track kiriman pengguna di-bundle secara eksplisit agar selalu terdeteksi Vite.
+  if (file === "music/01_exploring_the_ocean" || file === "music/title_menu") {
+    return menuTrackAssetUrl;
+  }
   for (const ext of EXT_ORDER) {
     const url = FOUND[`../assets/audio/${file}.${ext}`];
     if (url) return url;
@@ -107,10 +112,15 @@ function preloadSfx() {
 
 /** Panggil dari handler input (klik/tombol) agar browser mengizinkan suara. */
 export function unlockAudio() {
-  if (!init()) return;
-  if (ctx.state === "suspended") ctx.resume();
-  if (unlocked) return;
-  unlocked = true;
+  // HTMLAudio (BGM/ambience) tetap bisa dipakai walau WebAudio tidak tersedia.
+  // Ini juga memastikan pending BGM diputar langsung dari gesture pertama pengguna.
+  if (!unlocked) {
+    unlocked = true;
+    init();
+  }
+  if (ctx?.state === "suspended") {
+    ctx.resume().catch((error) => console.warn("AudioContext gagal di-resume:", error));
+  }
   if (pendingMusic !== undefined) {
     const key = pendingMusic;
     pendingMusic = undefined;
@@ -195,13 +205,22 @@ const SYNTH = {
   desir: () => noise({ dur: 0.5, freq: 1400, q: 0.8, vol: 0.18 }),
   klakson_kapal: () => { tone({ freq: 147, dur: 1.8, type: "sawtooth", vol: 0.09 }); tone({ freq: 110, dur: 1.8, type: "sawtooth", vol: 0.08 }); },
   langkah: () => noise({ dur: 0.05, freq: 1600, q: 2, vol: 0.025 }),
+  langkah_pasir: () => { noise({ dur: 0.09, freq: 850, q: 0.7, vol: 0.045 }); tone({ freq: 82, to: 48, dur: 0.07, vol: 0.04 }); },
+  langkah_daun: () => { noise({ dur: 0.12, freq: 2400, q: 0.6, vol: 0.07 }); tone({ freq: 95, to: 55, dur: 0.06, vol: 0.025 }); },
+  langkah_batu: () => { tone({ freq: 155, to: 90, dur: 0.075, type: "triangle", vol: 0.07 }); noise({ dur: 0.045, freq: 1800, q: 2, vol: 0.025 }); },
+  derit_kapal: () => { tone({ freq: 105, to: 66, dur: 1.4, type: "triangle", vol: 0.13 }); noise({ dur: 1.1, freq: 380, q: 0.7, vol: 0.08 }); },
+  kayu_patah: () => { noise({ dur: 0.11, freq: 4200, q: 0.7, vol: 0.22 }); tone({ freq: 110, to: 45, dur: 0.28, type: "triangle", vol: 0.12, delay: 0.02 }); },
+  ombak_hantam: () => { noise({ dur: 1.8, freq: 700, q: 0.5, vol: 0.25, type: "lowpass" }); noise({ dur: 1.2, freq: 3200, q: 0.5, vol: 0.12, delay: 0.2 }); },
+  camar: () => { tone({ freq: 1450, to: 2200, dur: 0.36, type: "sine", vol: 0.035 }); tone({ freq: 1900, to: 1350, dur: 0.3, type: "sine", vol: 0.03, delay: 0.42 }); },
   api: () => noise({ dur: 1.2, freq: 600, q: 0.5, vol: 0.3 })
 };
 
 function play(key, ...args) {
   if (!ctx) return;
-  const rate = key === "simbol" ? 1 + (args[0] || 0) * 0.06 : key === "langkah" ? 0.9 + Math.random() * 0.2 : 1;
-  const vol = key === "langkah" ? 0.5 : 1;
+  const isStep = key === "langkah" || key.startsWith("langkah_");
+  const rate = key === "simbol" ? 1 + (args[0] || 0) * 0.06 : isStep ? 0.9 + Math.random() * 0.2 : 1;
+  const fileLevels = { camar: 0.34, derit_kapal: 0.52, kayu_patah: 0.78, ombak_hantam: 0.72, gemuruh: 0.78 };
+  const vol = isStep ? 0.5 : (fileLevels[key] ?? 1);
   if (!playFile(key, vol, rate)) SYNTH[key]?.(...args);
 }
 
@@ -221,7 +240,14 @@ export const sfx = {
   rumble: () => play("gemuruh"),
   whoosh: () => play("desir"),
   horn: () => play("klakson_kapal"),
-  step: () => play("langkah"),
+  step: (surface = "pasir") => {
+    const key = surface === "daun" ? "langkah_daun" : surface === "batu" ? "langkah_batu" : "langkah_pasir";
+    play(key);
+  },
+  shipCreak: () => play("derit_kapal"),
+  woodBreak: () => play("kayu_patah"),
+  waveCrash: () => play("ombak_hantam"),
+  gull: () => play("camar"),
   fire: () => play("api")
 };
 
@@ -262,27 +288,62 @@ export function playMusic(key, { fade = 1400 } = {}) {
     pendingMusic = key;
     return;
   }
-  if (music?.key === key) return;
-  release(music, fade);
-  music = null;
+
   const def = key ? MUSIC[key] : null;
   const url = def ? urlFor(def.file) : null;
-  if (!url) {
-    music = { key, el: null };
+
+  // Layar Splash dan Lobby memakai URL yang sama: pertahankan elemen audio
+  // yang sedang berjalan agar lagu tidak restart pada perpindahan layar.
+  if (music?.el && url && music.url === url) {
+    music.key = key;
+    music.base = def.volume ?? music.base ?? 0.7;
+    music.el.loop = def.loop !== false;
+    applyVolumes();
+    if (music.el.paused || music.el.ended) {
+      if (music.el.ended) music.el.currentTime = 0;
+      const channel = music;
+      channel.el.play()
+        .then(() => {
+          if (music === channel) fadeEl(channel.el, musicLevel(channel.base), fade);
+        })
+        .catch((error) => console.warn("BGM tidak dapat diputar:", error));
+    }
     return;
   }
+
+  if (music?.key === key && !url) return;
+
+  release(music, fade);
+  music = null;
+  if (!url) {
+    music = { key, el: null, url: null };
+    return;
+  }
+
   const el = new Audio(url);
+  el.preload = "auto";
   el.loop = def.loop !== false;
   el.volume = 0;
-  music = { key, el, base: def.volume ?? 0.7 };
-  el.play().then(() => fadeEl(el, musicLevel(music?.base), fade)).catch(() => {});
-}
+  const channel = { key, el, url, base: def.volume ?? 0.7 };
+  music = channel;
 
+  el.play()
+    .then(() => {
+      if (music === channel) fadeEl(el, musicLevel(channel.base), fade);
+    })
+    .catch((error) => {
+      console.warn(`BGM '${key}' gagal diputar:`, error);
+    });
+}
 export function currentMusic() {
   return music?.key || null;
 }
 
 const SYNTH_AMB = {
+  voyage: { filter: "lowpass", freq: 430, q: 0.5, vol: 0.24, lfo: 0.09, depth: 0.16, chirp: [1500, 2450] },
+  storm: { filter: "lowpass", freq: 700, q: 0.7, vol: 0.38, lfo: 0.22, depth: 0.28, chirp: null },
+  wreck: { filter: "lowpass", freq: 230, q: 0.65, vol: 0.28, lfo: 0.07, depth: 0.12, chirp: [350, 700] },
+  island: { filter: "bandpass", freq: 760, q: 0.45, vol: 0.2, lfo: 0.1, depth: 0.12, chirp: [1750, 3200] },
   pantai: { filter: "bandpass", freq: 420, q: 0.5, vol: 0.5, lfo: 0.11, depth: 0.35, chirp: null },
   hutan: { filter: "highpass", freq: 2600, q: 0.4, vol: 0.12, lfo: 0.3, depth: 0.05, chirp: [1800, 3600] },
   angin: { filter: "lowpass", freq: 380, q: 0.8, vol: 0.55, lfo: 0.07, depth: 0.3, chirp: [1200, 1700] }
